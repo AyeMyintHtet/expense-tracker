@@ -1,12 +1,11 @@
 <template>
   <section class="greeting" aria-label="User greeting">
     <p class="greeting-label text-label">WELCOME BACK</p>
-    <h1 class="greeting-name text-heading">Hello, Jane</h1>
   </section>
 </template>
 
 <script setup>
-// GreetingSection — "Welcome back / Hello, Jane"
+// GreetingSection — "Welcome back"
 </script>
 
 <style scoped>
@@ -17,11 +16,6 @@
 }
 
 .greeting-label {
-  margin-bottom: var(--spacing-xs);
   color: var(--color-text-tertiary);
-}
-
-.greeting-name {
-  font-size: 1.75rem;
 }
 </style>

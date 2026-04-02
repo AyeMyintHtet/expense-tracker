@@ -10,27 +10,18 @@
       </div>
       <span class="brand-name">Spent</span>
     </div>
-
-    <button class="header-notification" aria-label="Notifications">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-      </svg>
-      <!-- Notification dot -->
-      <span class="notification-dot"></span>
-    </button>
   </header>
 </template>
 
 <script setup>
-// AppHeader — Top bar with logo and notification bell
+// AppHeader — Top bar with logo
 </script>
 
 <style scoped>
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: var(--spacing-lg) 0;
   padding-top: calc(var(--spacing-lg) + 8px);
   animation: fadeIn 0.4s ease;
@@ -58,33 +49,5 @@
   font-weight: 700;
   color: var(--color-text-primary);
   letter-spacing: -0.01em;
-}
-
-.header-notification {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  color: var(--color-text-secondary);
-  transition: all var(--transition-fast);
-}
-
-.header-notification:hover {
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.notification-dot {
-  position: absolute;
-  top: 8px;
-  right: 9px;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  box-shadow: 0 0 8px var(--color-primary);
 }
 </style>

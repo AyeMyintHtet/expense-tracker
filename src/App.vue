@@ -7,46 +7,45 @@
   -->
 
   <!-- STATE 1: First-time setup — no nav, no escape -->
-  <TwoFactorAuth
-    v-if="appState === 'setup'"
-    @pinSaved="handlePinSaved"
-  />
+  <TwoFactorAuth v-if="appState === 'setup'" @pinSaved="handlePinSaved" />
 
   <!-- STATE 2: Locked after inactivity — must re-enter PIN -->
-  <LockScreen
-    v-else-if="appState === 'locked'"
-    @unlocked="handleUnlocked"
-  />
+  <LockScreen v-else-if="appState === 'locked'" @unlocked="handleUnlocked" />
 
   <!-- STATE 3: Normal app — fully accessible -->
   <div v-else class="app-shell">
     <main class="app-content">
       <AppHeader />
-      <GreetingSection />
-      <BalanceCard 
-        :total="total" 
-        :percentChange="percentChange" 
-      />
-      <SpendingTrend :weeklyData="weeklySpending" />
-      <RecentActivity 
-        :transactions="sortedTransactions" 
-        @delete="handleTransactionDeleted"
-      />
+
+      <!-- Sticky BalanceCard: placed outside the transition so sticky positioning works -->
+      <template v-if="activeTab === 'home'">
+        <GreetingSection />
+        <BalanceCard :total="total" :percentChange="percentChange" />
+      </template>
+
+      <transition :name="tabDirection === 'forward' ? 'tab-slide-forward' : 'tab-slide-back'" mode="out-in">
+        <section :key="activeTab" class="tab-panel">
+          <template v-if="activeTab === 'home'">
+            <RecentActivity :transactions="sortedTransactions" @delete="handleTransactionDeleted" />
+          </template>
+
+          <StatsTab v-else-if="activeTab === 'stats'" :hasTransactions="hasTransactions" :summary="currentMonthSummary"
+            :percentChange="percentChange" :avgDailyExpense="averageDailyExpense"
+            :expenseTransactionCount="expenseTransactionCount" :weeklyData="weeklySpending"
+            :categoryBreakdown="categoryBreakdown" />
+
+          <ReportsTab v-else-if="activeTab === 'reports'" :hasTransactions="hasTransactions" :reports="monthlyReports"
+            :largestExpense="largestExpense" :largestIncome="largestIncome" />
+        </section>
+      </transition>
     </main>
 
-    <!-- Fixed bottom navigation -->
-    <BottomNav :activeTab="activeTab" @tabChange="handleTabChange" />
+    <BottomNav :activeTab="navActiveTab" @tabChange="handleTabChange" />
 
-    <!-- Floating action button -->
-    <AddButton @click="showAddModal = true" />
-
-    <!-- Add transaction modal -->
-    <AddTransactionModal
-      v-if="showAddModal"
-      @close="showAddModal = false"
-      @submit="handleTransactionSubmitted"
-    />
+    <AddTransactionModal v-if="showAddModal" @close="closeAddModal" @submit="handleTransactionSubmitted" />
   </div>
+
+  <PwaUpdateBanner :show="isPwaUpdateAvailable" @update="handlePwaUpdate" @dismiss="dismissPwaUpdate" />
 </template>
 
 <script setup>
@@ -56,22 +55,42 @@ import { useToast } from 'vue-toastification';
 import AppHeader from './components/AppHeader.vue';
 import GreetingSection from './components/GreetingSection.vue';
 import BalanceCard from './components/BalanceCard.vue';
-import SpendingTrend from './components/SpendingTrend.vue';
 import RecentActivity from './components/RecentActivity.vue';
+import StatsTab from './components/StatsTab.vue';
+import ReportsTab from './components/ReportsTab.vue';
 import BottomNav from './components/BottomNav.vue';
-import AddButton from './components/AddButton.vue';
 import AddTransactionModal from './components/AddTransactionModal.vue';
 import TwoFactorAuth from './components/TwoFactorAuth.vue';
 import LockScreen from './components/LockScreen.vue';
+import PwaUpdateBanner from './components/PwaUpdateBanner.vue';
 import {
   INACTIVITY_TIMEOUT_MS,
   STORAGE_KEYS,
   hasConfiguredPin,
 } from './utils/security';
+import {
+  buildCategoryBreakdown,
+  buildMonthlyReports,
+  buildWeeklyExpense,
+  calculateAverageDailyExpense,
+  calculateMonthSummary,
+  calculatePercentChangeCurrentVsPreviousMonth,
+  calculateTotalBalance,
+  findLargestExpense,
+  findLargestIncome,
+  getMonthExpenseTransactions,
+  normalizeTransactions,
+  getSortedTransactions,
+} from './utils/analytics';
 
 const toast = useToast();
 const activeTab = ref('home');
 const showAddModal = ref(false);
+const isPwaUpdateAvailable = ref(false);
+const waitingServiceWorker = ref(null);
+const tabDirection = ref('forward');
+
+const PWA_UPDATE_EVENT = 'spent:pwa-update-available';
 
 // ==========================================
 // SECURITY: App state machine
@@ -180,81 +199,7 @@ const saveTransactions = () => {
   localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(transactions.value));
 };
 
-const getDateKey = (dateLike) => {
-  const date = new Date(dateLike);
-  if (Number.isNaN(date.getTime())) return null;
 
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-};
-
-const sumTransactionsBetween = (list, startDate, endDate) => {
-  return list.reduce((sum, tx) => {
-    const txDate = new Date(tx.date);
-    if (txDate >= startDate && txDate < endDate) {
-      return sum + tx.amount;
-    }
-
-    return sum;
-  }, 0);
-};
-
-const seedTransactions = () => {
-  transactions.value = [
-    {
-      id: 1,
-      text: 'Starbucks',
-      category: 'Food & Drink',
-      icon: 'coffee',
-      amount: -5.50,
-      date: '2026-04-02T10:24:00',
-    },
-    {
-      id: 2,
-      text: 'Apple Music',
-      category: 'Subscriptions',
-      icon: 'music',
-      amount: -9.99,
-      date: '2026-04-01T08:00:00',
-    },
-    {
-      id: 3,
-      text: 'Lyft',
-      category: 'Transport',
-      icon: 'car',
-      amount: -15.20,
-      date: '2026-03-14T14:30:00',
-    },
-    {
-      id: 4,
-      text: 'Salary Deposit',
-      category: 'Income',
-      icon: 'wallet',
-      amount: 4500.00,
-      date: '2026-03-12T09:00:00',
-    },
-    {
-      id: 5,
-      text: 'Netflix',
-      category: 'Subscriptions',
-      icon: 'tv',
-      amount: -15.99,
-      date: '2026-03-10T08:00:00',
-    },
-    {
-      id: 6,
-      text: 'Grocery Store',
-      category: 'Food & Drink',
-      icon: 'coffee',
-      amount: -87.43,
-      date: '2026-03-09T11:00:00',
-    },
-  ];
-  saveTransactions();
-};
 
 // ==========================================
 // SECURITY: Event handlers
@@ -291,95 +236,46 @@ onMounted(() => {
   // 3. Load transaction data
   const saved = loadTransactions();
   if (saved === null) {
-    // Seed with demo data on first run
-    seedTransactions();
+    // No stored data yet
   } else {
     transactions.value = saved;
   }
-});
-
-onBeforeUnmount(() => {
-  stopActivityTracking();
+  window.addEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
 });
 
 // Computed values
 const normalizedTransactions = computed(() => {
-  return transactions.value
-    .map((tx) => ({
-      ...tx,
-      amount: Number(tx.amount),
-      date: tx.date ?? new Date().toISOString(),
-    }))
-    .filter((tx) => Number.isFinite(tx.amount) && !Number.isNaN(new Date(tx.date).getTime()));
+  return normalizeTransactions(transactions.value);
 });
 
 const sortedTransactions = computed(() => {
-  return [...normalizedTransactions.value]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .map((tx) => ({ ...tx, amount: Number(tx.amount) }));
+  return getSortedTransactions(normalizedTransactions.value);
 });
 
 const total = computed(() => {
-  return normalizedTransactions.value.reduce((sum, tx) => sum + tx.amount, 0);
+  return calculateTotalBalance(normalizedTransactions.value);
 });
 
 const percentChange = computed(() => {
-  const now = new Date();
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-  const currentMonthTotal = sumTransactionsBetween(
-    normalizedTransactions.value,
-    currentMonthStart,
-    nextMonthStart,
-  );
-  const previousMonthTotal = sumTransactionsBetween(
-    normalizedTransactions.value,
-    previousMonthStart,
-    currentMonthStart,
-  );
-
-  if (previousMonthTotal === 0) {
-    return currentMonthTotal === 0 ? 0 : 100;
-  }
-
-  const change = ((currentMonthTotal - previousMonthTotal) / Math.abs(previousMonthTotal)) * 100;
-  return Number(change.toFixed(1));
+  return calculatePercentChangeCurrentVsPreviousMonth(normalizedTransactions.value);
 });
 
 const weeklySpending = computed(() => {
-  const today = new Date();
-  const buckets = [];
-
-  for (let dayOffset = 6; dayOffset >= 0; dayOffset -= 1) {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOffset);
-    buckets.push({
-      key: getDateKey(date),
-      day: date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
-      amount: 0,
-    });
-  }
-
-  const bucketByDateKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
-
-  normalizedTransactions.value.forEach((tx) => {
-    if (tx.amount >= 0) return;
-
-    const key = getDateKey(tx.date);
-    if (!key) return;
-
-    const bucket = bucketByDateKey.get(key);
-    if (bucket) {
-      bucket.amount += Math.abs(tx.amount);
-    }
-  });
-
-  return buckets.map(({ day, amount }) => ({
-    day,
-    amount: Number(amount.toFixed(2)),
-  }));
+  return buildWeeklyExpense(normalizedTransactions.value);
 });
+
+const hasTransactions = computed(() => normalizedTransactions.value.length > 0);
+const currentMonthSummary = computed(() => calculateMonthSummary(normalizedTransactions.value));
+const averageDailyExpense = computed(() => calculateAverageDailyExpense(normalizedTransactions.value));
+const expenseTransactionCount = computed(() => {
+  return getMonthExpenseTransactions(normalizedTransactions.value).length;
+});
+const categoryBreakdown = computed(() => buildCategoryBreakdown(normalizedTransactions.value));
+const monthlyReports = computed(() => buildMonthlyReports(normalizedTransactions.value, 6));
+const largestExpense = computed(() => findLargestExpense(normalizedTransactions.value));
+const largestIncome = computed(() => findLargestIncome(normalizedTransactions.value));
+const navActiveTab = computed(() => (showAddModal.value ? 'add' : activeTab.value));
+const TAB_ORDER = ['home', 'stats', 'reports'];
 
 // Event handlers
 const handleTransactionSubmitted = (data) => {
@@ -409,8 +305,49 @@ const handleTransactionDeleted = (id) => {
 };
 
 const handleTabChange = (tab) => {
+  if (tab === 'add') {
+    showAddModal.value = true;
+    return;
+  }
+
+  const currentIndex = TAB_ORDER.indexOf(activeTab.value);
+  const nextIndex = TAB_ORDER.indexOf(tab);
+
+  if (currentIndex !== -1 && nextIndex !== -1) {
+    tabDirection.value = nextIndex >= currentIndex ? 'forward' : 'back';
+  }
+
   activeTab.value = tab;
 };
+
+const closeAddModal = () => {
+  showAddModal.value = false;
+};
+
+const handlePwaUpdateAvailable = (event) => {
+  const registration = event?.detail?.registration;
+  if (!registration?.waiting) return;
+
+  waitingServiceWorker.value = registration.waiting;
+  isPwaUpdateAvailable.value = true;
+};
+
+const handlePwaUpdate = () => {
+  if (!waitingServiceWorker.value) return;
+
+  sessionStorage.setItem('spent_reload_after_sw_update', '1');
+  waitingServiceWorker.value.postMessage({ type: 'SKIP_WAITING' });
+  isPwaUpdateAvailable.value = false;
+};
+
+const dismissPwaUpdate = () => {
+  isPwaUpdateAvailable.value = false;
+};
+
+onBeforeUnmount(() => {
+  stopActivityTracking();
+  window.removeEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
+});
 </script>
 
 <style scoped>
@@ -418,11 +355,45 @@ const handleTabChange = (tab) => {
   position: relative;
   min-height: 100vh;
   background-color: var(--color-bg);
-  padding-bottom: calc(var(--nav-height) + 20px);
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 20px);
 }
 
 .app-content {
   padding: 0 var(--spacing-lg);
   padding-bottom: var(--spacing-xl);
+}
+
+.tab-panel {
+  min-height: calc(100vh - var(--nav-height) - env(safe-area-inset-bottom));
+}
+
+.tab-slide-forward-enter-active,
+.tab-slide-forward-leave-active,
+.tab-slide-back-enter-active,
+.tab-slide-back-leave-active {
+  transition: opacity 240ms ease, transform 240ms ease;
+  will-change: transform, opacity;
+}
+
+.tab-slide-forward-enter-from,
+.tab-slide-back-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.tab-slide-forward-leave-to,
+.tab-slide-back-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .tab-slide-forward-enter-active,
+  .tab-slide-forward-leave-active,
+  .tab-slide-back-enter-active,
+  .tab-slide-back-leave-active {
+    transition: none;
+  }
 }
 </style>

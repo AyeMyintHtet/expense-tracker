@@ -1,7 +1,7 @@
 <template>
   <section class="balance-card" aria-label="Total balance">
     <p class="balance-label">Total Balance</p>
-    <h2 class="balance-amount">{{ formattedTotal }}</h2>
+    <h2 class="balance-amount" :class="{ 'balance-amount--negative': total < 0, 'balance-amount--positive': total >= 0 }">{{ formattedTotal }}</h2>
     <div class="balance-change">
       <span class="change-badge" :class="{ negative: percentChange < 0 }">
         <svg 
@@ -48,6 +48,10 @@ const formattedTotal = computed(() => {
 
 <style scoped>
 .balance-card {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
@@ -55,7 +59,6 @@ const formattedTotal = computed(() => {
   margin-bottom: var(--spacing-xl);
   animation: scaleIn 0.5s ease both;
   animation-delay: 0.2s;
-  position: relative;
   overflow: hidden;
 }
 
@@ -87,11 +90,19 @@ const formattedTotal = computed(() => {
 .balance-amount {
   font-size: 2.5rem;
   font-weight: 800;
-  color: var(--color-text-primary);
   letter-spacing: -0.03em;
   line-height: 1.1;
   margin-bottom: var(--spacing-md);
   position: relative;
+  transition: color var(--transition-fast);
+}
+
+.balance-amount--positive {
+  color: var(--color-income);
+}
+
+.balance-amount--negative {
+  color: var(--color-expense);
 }
 
 .balance-change {
