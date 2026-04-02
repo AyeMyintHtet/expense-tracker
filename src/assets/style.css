@@ -1,153 +1,237 @@
-@import url('https://fonts.googleapis.com/css?family=Lato&display=swap');
+/* ========================================
+   DESIGN TOKENS — "Spent" Expense Tracker
+   Colors extracted from the typography sheet:
+     Primary:   #00FFAB (mint green)
+     Secondary: #37855F (deep green)
+     Tertiary:  #FFDE61 (golden yellow)
+     Neutral:   #121212 (dark background)
+   ======================================== */
 
 :root {
-  --box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  /* Primary palette */
+  --color-primary: #00FFAB;
+  --color-primary-dim: rgba(0, 255, 171, 0.15);
+  --color-primary-glow: rgba(0, 255, 171, 0.25);
+
+  /* Secondary palette */
+  --color-secondary: #37855F;
+  --color-secondary-dim: rgba(55, 133, 95, 0.3);
+
+  /* Tertiary / accent */
+  --color-tertiary: #FFDE61;
+
+  /* Neutrals */
+  --color-bg: #0A0A0A;
+  --color-surface: #141414;
+  --color-surface-elevated: #1A1A1A;
+  --color-surface-hover: #1F1F1F;
+  --color-border: rgba(255, 255, 255, 0.06);
+
+  /* Text */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.55);
+  --color-text-tertiary: rgba(255, 255, 255, 0.35);
+
+  /* Semantic */
+  --color-expense: #FF6B6B;
+  --color-income: #00FFAB;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 50%;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Bottom nav safe area */
+  --nav-height: 72px;
 }
 
-* {
+/* ========== RESET & BASE ========== */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  background-color: #f7f7f7;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  font-family: var(--font-family);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  overflow-x: hidden;
   min-height: 100vh;
-  margin: 0;
-  font-family: 'Lato', sans-serif;
-  font-size: 18px;
+  /* Prevent rubber-band on mobile */
+  overscroll-behavior-y: contain;
 }
 
-.container {
-  margin: 30px auto;
-  width: 400px;
-}
-
-h1 {
-  letter-spacing: 1px;
-  margin: 0;
-}
-
-h3 {
-  border-bottom: 1px solid #bbb;
-  padding-bottom: 10px;
-  margin: 40px 0 10px;
-}
-
-h4 {
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.inc-exp-container {
-  background-color: #fff;
-  box-shadow: var(--box-shadow);
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  margin: 20px 0;
-}
-
-.inc-exp-container > div {
-  flex: 1;
-  text-align: center;
-}
-
-.inc-exp-container > div:first-of-type {
-  border-right: 1px solid #dedede;
-}
-
-.money {
-  font-size: 20px;
-  letter-spacing: 1px;
-  margin: 5px 0;
-}
-
-.money.plus {
-  color: #2ecc71;
-}
-
-.money.minus {
-  color: #c0392b;
-}
-
-label {
-  display: inline-block;
-  margin: 10px 0;
-}
-
-input[type='text'],
-input[type='number'] {
-  border: 1px solid #dedede;
-  border-radius: 2px;
-  display: block;
-  font-size: 16px;
-  padding: 10px;
-  width: 100%;
-}
-
-.btn {
-  cursor: pointer;
-  background-color: #9c88ff;
-  box-shadow: var(--box-shadow);
-  color: #fff;
-  border: 0;
-  display: block;
-  font-size: 16px;
-  margin: 10px 0 30px;
-  padding: 10px;
-  width: 100%;
-}
-
-.btn:focus,
-.delete-btn:focus {
-  outline: 0;
-}
-
-.list {
-  list-style-type: none;
-  padding: 0;
-  margin-bottom: 40px;
-}
-
-.list li {
-  background-color: #fff;
-  box-shadow: var(--box-shadow);
-  color: #333;
-  display: flex;
-  justify-content: space-between;
+#app {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
   position: relative;
-  padding: 10px;
-  margin: 10px 0;
+  /* Subtle side shadow to frame the "phone" on desktop */
+  box-shadow: 0 0 80px rgba(0, 0, 0, 0.5);
 }
 
-.list li.plus {
-  border-right: 5px solid #2ecc71;
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
-.list li.minus {
-  border-right: 5px solid #c0392b;
-}
-
-.delete-btn {
+button {
+  border: none;
+  background: none;
   cursor: pointer;
-  background-color: #e74c3c;
-  border: 0;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 20px;
-  line-height: 20px;
-  padding: 10px 15px;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
+  font-family: inherit;
+  color: inherit;
 }
 
-.list li:hover .delete-btn {
-  opacity: 1;
+ul, ol {
+  list-style: none;
 }
+
+/* ========== SCROLLBAR (webkit) ========== */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-elevated);
+  border-radius: 2px;
+}
+
+/* ========== TYPOGRAPHY UTILITIES ========== */
+.text-label {
+  font-size: 0.6875rem;   /* 11px */
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.text-body {
+  font-size: 0.875rem;    /* 14px */
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.text-body-strong {
+  font-size: 0.9375rem;   /* 15px */
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.text-heading {
+  font-size: 1.625rem;    /* 26px */
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.text-display {
+  font-size: 2.25rem;     /* 36px */
+  font-weight: 800;
+  color: var(--color-text-primary);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* ========== ANIMATION KEYFRAMES ========== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes barGrow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Staggered entrance for list items */
+.stagger-enter {
+  animation: fadeInUp 0.5s ease both;
+}
+
+.stagger-enter:nth-child(1) { animation-delay: 0.05s; }
+.stagger-enter:nth-child(2) { animation-delay: 0.1s; }
+.stagger-enter:nth-child(3) { animation-delay: 0.15s; }
+.stagger-enter:nth-child(4) { animation-delay: 0.2s; }
+.stagger-enter:nth-child(5) { animation-delay: 0.25s; }
