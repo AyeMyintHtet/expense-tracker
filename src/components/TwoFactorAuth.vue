@@ -85,7 +85,27 @@
           </span>
         </div>
 
-        <!-- Confirm button — disabled unless both PINS are 6 digits AND match -->
+        <!-- Agreement checkbox -->
+        <label class="agree-row">
+          <input
+            v-model="hasAgreed"
+            type="checkbox"
+            class="agree-checkbox"
+          />
+          <span class="agree-checkmark">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+          <span class="agree-text">
+            I agree to the
+            <button type="button" class="agree-link" @click.prevent="openLegalModal('terms')">Terms &amp; Condition</button>
+            and
+            <button type="button" class="agree-link" @click.prevent="openLegalModal('privacy')">Privacy Policy</button>
+          </span>
+        </label>
+
+        <!-- Confirm button — disabled unless PINs match AND user has agreed -->
         <button
           type="submit"
           class="submit-btn"
@@ -116,6 +136,36 @@
       </p>
     </div>
   </div>
+
+  <!-- Legal document popup (Terms & Condition / Privacy Policy) -->
+  <Teleport to="body">
+    <div v-if="activeLegalDocument" class="legal-overlay" @click.self="closeLegalModal">
+      <div class="legal-modal" role="dialog" aria-modal="true" aria-label="Legal document">
+        <div class="legal-modal__header">
+          <h3 class="legal-modal__title">{{ activeLegalContent?.title }}</h3>
+          <button type="button" class="legal-modal__close-icon" aria-label="Close" @click="closeLegalModal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <p class="legal-modal__updated">Last updated: April 3, 2026</p>
+
+        <div class="legal-modal__body">
+          <section v-for="section in activeLegalContent?.sections" :key="section.heading" class="legal-modal__section">
+            <h4 class="legal-modal__section-title">{{ section.heading }}</h4>
+            <p class="legal-modal__section-text">{{ section.text }}</p>
+          </section>
+        </div>
+
+        <button type="button" class="legal-modal__close-btn" @click="closeLegalModal">
+          Close
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -129,6 +179,38 @@ const toast = useToast();
 const pin = ref('');
 const confirmPin = ref('');
 const saved = ref(false);
+const hasAgreed = ref(false);
+const activeLegalDocument = ref(null);
+
+// Legal content — same as SettingsTab, duplicated here because
+// TwoFactorAuth renders before the rest of the app is mounted.
+const LEGAL_CONTENT = {
+  privacy: {
+    title: 'Privacy Policy',
+    sections: [
+      { heading: '1. Data We Store', text: 'This app stores transaction records, selected currency, app lock PIN hash, and security attempts locally on your device.' },
+      { heading: '2. How Data Is Used', text: 'Stored data is used only to provide budgeting features such as balance calculations, reports, and app lock protection.' },
+      { heading: '3. Data Sharing', text: 'The app does not automatically send your personal financial data to external servers.' },
+      { heading: '4. Your Control', text: 'You can remove app data by clearing your browser/app storage or uninstalling the application.' },
+      { heading: '5. Security Notice', text: 'Your PIN is saved as a hash on the current device. Keep your device protected and do not share your PIN.' },
+    ],
+  },
+  terms: {
+    title: 'Terms & Condition',
+    sections: [
+      { heading: '1. Acceptance', text: 'By using this app, you agree to these terms and take responsibility for how you use the financial tracking features.' },
+      { heading: '2. Personal Use', text: 'This app is provided for personal budgeting and expense tracking. You are responsible for the accuracy of entered data.' },
+      { heading: '3. No Financial Advice', text: 'Information in the app is for tracking and reporting only and does not represent financial, legal, or tax advice.' },
+      { heading: '4. Service Availability', text: 'The app is provided as-is without warranty. Features may change or be updated over time.' },
+      { heading: '5. Data Responsibility', text: 'You are responsible for keeping backups if needed and securing access to your own device.' },
+    ],
+  },
+};
+
+const activeLegalContent = computed(() => {
+  if (!activeLegalDocument.value) return null;
+  return LEGAL_CONTENT[activeLegalDocument.value] || null;
+});
 
 const handlePinInput = () => {
   pin.value = sanitizePin(pin.value);
@@ -143,8 +225,16 @@ const pinsMatch = computed(() => {
   return pin.value.length === 6 && confirmPin.value === pin.value;
 });
 
-/** Button is only enabled when both PINs are valid and matching */
-const isValid = computed(() => pinsMatch.value && !saved.value);
+/** Button is only enabled when PINs match AND user has agreed to legal terms */
+const isValid = computed(() => pinsMatch.value && hasAgreed.value && !saved.value);
+
+const openLegalModal = (type) => {
+  activeLegalDocument.value = type;
+};
+
+const closeLegalModal = () => {
+  activeLegalDocument.value = null;
+};
 
 const handleConfirm = async () => {
   if (!isValid.value) return;
@@ -438,5 +528,196 @@ const handleConfirm = async () => {
 .tfa-note svg {
   flex-shrink: 0;
   opacity: 0.6;
+}
+
+/* ========== AGREEMENT CHECKBOX ========== */
+.agree-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Hide the native checkbox */
+.agree-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Custom checkbox square */
+.agree-checkmark {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.agree-checkmark svg {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all var(--transition-fast);
+  color: #0A0A0A;
+}
+
+/* Checked state */
+.agree-checkbox:checked + .agree-checkmark {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 171, 0.3);
+}
+
+.agree-checkbox:checked + .agree-checkmark svg {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Focus ring for keyboard navigation */
+.agree-checkbox:focus-visible + .agree-checkmark {
+  box-shadow: 0 0 0 3px var(--color-primary-dim);
+}
+
+.agree-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.agree-link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--transition-fast),
+    opacity var(--transition-fast);
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.agree-link:hover {
+  border-bottom-color: var(--color-primary);
+  opacity: 0.85;
+}
+
+/* ========== LEGAL MODAL ========== */
+.legal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.legal-modal {
+  width: 100%;
+  max-width: 430px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+  animation: scaleIn 0.24s ease;
+}
+
+.legal-modal__header {
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.legal-modal__title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.legal-modal__close-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.legal-modal__close-icon:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.legal-modal__updated {
+  padding: 0 var(--spacing-md);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+.legal-modal__body {
+  margin-top: var(--spacing-sm);
+  padding: 0 var(--spacing-md) var(--spacing-md);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.legal-modal__section {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-elevated);
+}
+
+.legal-modal__section-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.legal-modal__section-text {
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.legal-modal__close-btn {
+  margin: 0 var(--spacing-md) var(--spacing-md);
+  min-height: 42px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #0A0A0A;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: opacity var(--transition-fast);
+}
+
+.legal-modal__close-btn:hover {
+  opacity: 0.9;
 }
 </style>
