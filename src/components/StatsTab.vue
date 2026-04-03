@@ -62,8 +62,9 @@
 </template>
 
 <script setup>
+import { formatCurrency as formatAmountCurrency } from '../utils/currency';
 
-defineProps({
+const props = defineProps({
   hasTransactions: {
     type: Boolean,
     required: true,
@@ -92,19 +93,17 @@ defineProps({
     type: Array,
     required: true,
   },
+  currency: {
+    type: String,
+    default: 'USD',
+  },
 });
 
 const formatCurrency = (amount) => {
-  return `$${Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatAmountCurrency(amount, props.currency);
 };
 
 const formatSignedCurrency = (amount) => {
-  if (amount < 0) {
-    return `-${formatCurrency(Math.abs(amount))}`;
-  }
   return formatCurrency(amount);
 };
 </script>

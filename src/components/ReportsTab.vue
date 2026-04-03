@@ -14,14 +14,14 @@
         <article class="highlight-card">
           <p class="highlight-label">Largest Expense</p>
           <p class="highlight-value">
-            {{ largestExpense ? formatCurrency(Math.abs(largestExpense.amount)) : '$0.00' }}
+            {{ largestExpense ? formatCurrency(Math.abs(largestExpense.amount)) : formatCurrency(0) }}
           </p>
         </article>
 
         <article class="highlight-card">
           <p class="highlight-label">Largest Income</p>
           <p class="highlight-value">
-            {{ largestIncome ? formatCurrency(largestIncome.amount) : '$0.00' }}
+            {{ largestIncome ? formatCurrency(largestIncome.amount) : formatCurrency(0) }}
           </p>
         </article>
       </section>
@@ -61,7 +61,9 @@
 </template>
 
 <script setup>
-defineProps({
+import { formatCurrency as formatAmountCurrency } from '../utils/currency';
+
+const props = defineProps({
   hasTransactions: {
     type: Boolean,
     required: true,
@@ -78,19 +80,17 @@ defineProps({
     type: Object,
     default: null,
   },
+  currency: {
+    type: String,
+    default: 'USD',
+  },
 });
 
 const formatCurrency = (amount) => {
-  return `$${Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatAmountCurrency(amount, props.currency);
 };
 
 const formatSignedCurrency = (amount) => {
-  if (amount < 0) {
-    return `-${formatCurrency(Math.abs(amount))}`;
-  }
   return formatCurrency(amount);
 };
 </script>

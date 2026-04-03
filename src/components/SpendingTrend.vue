@@ -12,7 +12,7 @@
         class="chart-tooltip"
         :style="tooltipPosition"
       >
-        ${{ weeklyData[highlightedIndex].amount }}
+        {{ formatTooltipAmount(weeklyData[highlightedIndex].amount) }}
       </div>
 
       <div class="chart-bars">
@@ -37,11 +37,16 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { formatCurrency } from '../utils/currency';
 
 const props = defineProps({
   weeklyData: {
     type: Array,
     required: true,
+  },
+  currency: {
+    type: String,
+    default: 'USD',
   },
 });
 
@@ -78,6 +83,10 @@ const getBarHeight = (amount) => {
 
   const scaled = (amount / maxAmount.value) * 100;
   return Math.max(scaled, minHeight);
+};
+
+const formatTooltipAmount = (amount) => {
+  return formatCurrency(amount, props.currency);
 };
 
 // Position the tooltip above the highlighted bar

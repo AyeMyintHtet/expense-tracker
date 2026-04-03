@@ -76,6 +76,10 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none;      /* Internet Explorer/Edge */
+  user-select: none;         /* Standard syntax */
+
 }
 
 body {

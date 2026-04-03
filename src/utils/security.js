@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   failedAttempts: 'spent_failed_attempts',
   lockoutUntil: 'spent_lockout_until',
   transactions: 'spent_transactions',
+  currency: 'spent_currency',
 };
 
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;

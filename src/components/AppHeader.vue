@@ -19,11 +19,25 @@
 
 <style scoped>
 .app-header {
+  /* Stick to the top and layer above BalanceCard (z-index: 20) */
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: var(--spacing-lg) 0;
+
+  /* Break out of parent padding so the bg is truly edge-to-edge */
+  margin-left: calc(-1 * var(--spacing-lg));
+  margin-right: calc(-1 * var(--spacing-lg));
+  padding: var(--spacing-lg) var(--spacing-lg);
   padding-top: calc(var(--spacing-lg) + 8px);
+
+  /* Solid bg so scrolled content doesn't bleed through */
+  background: var(--color-bg);
+
   animation: fadeIn 0.4s ease;
 }
 

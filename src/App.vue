@@ -20,36 +20,75 @@
       <!-- Sticky BalanceCard: placed outside the transition so sticky positioning works -->
       <template v-if="activeTab === 'home'">
         <GreetingSection />
-        <BalanceCard :total="total" :percentChange="percentChange" />
+        <BalanceCard :total="total" :percentChange="percentChange" :currency="activeCurrency" />
       </template>
 
       <transition :name="tabDirection === 'forward' ? 'tab-slide-forward' : 'tab-slide-back'" mode="out-in">
         <section :key="activeTab" class="tab-panel">
           <template v-if="activeTab === 'home'">
-            <RecentActivity :transactions="sortedTransactions" @delete="handleTransactionDeleted" />
+            <RecentActivity
+              :transactions="sortedTransactions"
+              :currency="activeCurrency"
+              @delete="handleTransactionDeleted"
+              @edit="handleTransactionEdit"
+            />
           </template>
 
-          <StatsTab v-else-if="activeTab === 'stats'" :hasTransactions="hasTransactions" :summary="currentMonthSummary"
-            :percentChange="percentChange" :avgDailyExpense="averageDailyExpense"
-            :expenseTransactionCount="expenseTransactionCount" :weeklyData="weeklySpending"
-            :categoryBreakdown="categoryBreakdown" />
+          <StatsTab
+            v-else-if="activeTab === 'stats'"
+            :hasTransactions="hasTransactions"
+            :summary="currentMonthSummary"
+            :percentChange="percentChange"
+            :avgDailyExpense="averageDailyExpense"
+            :expenseTransactionCount="expenseTransactionCount"
+            :weeklyData="weeklySpending"
+            :categoryBreakdown="categoryBreakdown"
+            :currency="activeCurrency"
+          />
 
-          <ReportsTab v-else-if="activeTab === 'reports'" :hasTransactions="hasTransactions" :reports="monthlyReports"
-            :largestExpense="largestExpense" :largestIncome="largestIncome" />
+          <ReportsTab
+            v-else-if="activeTab === 'reports'"
+            :hasTransactions="hasTransactions"
+            :reports="monthlyReports"
+            :largestExpense="largestExpense"
+            :largestIncome="largestIncome"
+            :currency="activeCurrency"
+          />
+
+          <SettingsTab
+            v-else-if="activeTab === 'settings'"
+            :currency="activeCurrency"
+            :currencyOptions="currencyOptions"
+            @currencyChange="handleCurrencySaved"
+          />
         </section>
       </transition>
     </main>
 
     <BottomNav :activeTab="navActiveTab" @tabChange="handleTabChange" />
 
-    <AddTransactionModal v-if="showAddModal" @close="closeAddModal" @submit="handleTransactionSubmitted" />
+    <AddTransactionModal
+      v-if="showAddModal"
+      :transaction="editingTransaction"
+      :currency="activeCurrency"
+      @close="closeAddModal"
+      @submit="handleTransactionSubmitted"
+      @update="handleTransactionUpdated"
+    />
+
+    <CurrencySetupModal
+      v-if="showCurrencySetup"
+      :currency="activeCurrency"
+      :options="currencyOptions"
+      @save="handleCurrencySaved"
+    />
   </div>
 
   <PwaUpdateBanner :show="isPwaUpdateAvailable" @update="handlePwaUpdate" @dismiss="dismissPwaUpdate" />
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useToast } from 'vue-toastification';
 
 import AppHeader from './components/AppHeader.vue';
@@ -58,16 +97,24 @@ import BalanceCard from './components/BalanceCard.vue';
 import RecentActivity from './components/RecentActivity.vue';
 import StatsTab from './components/StatsTab.vue';
 import ReportsTab from './components/ReportsTab.vue';
+import SettingsTab from './components/SettingsTab.vue';
 import BottomNav from './components/BottomNav.vue';
 import AddTransactionModal from './components/AddTransactionModal.vue';
 import TwoFactorAuth from './components/TwoFactorAuth.vue';
 import LockScreen from './components/LockScreen.vue';
 import PwaUpdateBanner from './components/PwaUpdateBanner.vue';
+import CurrencySetupModal from './components/CurrencySetupModal.vue';
 import {
   INACTIVITY_TIMEOUT_MS,
   STORAGE_KEYS,
   hasConfiguredPin,
 } from './utils/security';
+import {
+  DEFAULT_CURRENCY,
+  getCurrencyOptions,
+  getStoredCurrency,
+  setStoredCurrency,
+} from './utils/currency';
 import {
   buildCategoryBreakdown,
   buildMonthlyReports,
@@ -86,9 +133,13 @@ import {
 const toast = useToast();
 const activeTab = ref('home');
 const showAddModal = ref(false);
+/** Holds the transaction being edited, or null when creating a new one */
+const editingTransaction = ref(null);
 const isPwaUpdateAvailable = ref(false);
 const waitingServiceWorker = ref(null);
 const tabDirection = ref('forward');
+const selectedCurrency = ref(getStoredCurrency());
+const currencyOptions = getCurrencyOptions('en-US');
 
 const PWA_UPDATE_EVENT = 'spent:pwa-update-available';
 
@@ -275,7 +326,11 @@ const monthlyReports = computed(() => buildMonthlyReports(normalizedTransactions
 const largestExpense = computed(() => findLargestExpense(normalizedTransactions.value));
 const largestIncome = computed(() => findLargestIncome(normalizedTransactions.value));
 const navActiveTab = computed(() => (showAddModal.value ? 'add' : activeTab.value));
-const TAB_ORDER = ['home', 'stats', 'reports'];
+const activeCurrency = computed(() => selectedCurrency.value || DEFAULT_CURRENCY);
+const showCurrencySetup = computed(() => {
+  return appState.value === 'unlocked' && !selectedCurrency.value;
+});
+const TAB_ORDER = ['home', 'stats', 'reports', 'settings'];
 
 // Event handlers
 const handleTransactionSubmitted = (data) => {
@@ -295,6 +350,7 @@ const handleTransactionSubmitted = (data) => {
   });
   saveTransactions();
   showAddModal.value = false;
+  editingTransaction.value = null;
   toast.success('Transaction added');
 };
 
@@ -318,10 +374,48 @@ const handleTabChange = (tab) => {
   }
 
   activeTab.value = tab;
+
+  // Always reset viewport position when moving between tabs.
+  nextTick(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  });
 };
 
 const closeAddModal = () => {
   showAddModal.value = false;
+  editingTransaction.value = null;
+};
+
+/** Open the modal pre-filled with an existing transaction for editing */
+const handleTransactionEdit = (tx) => {
+  editingTransaction.value = tx;
+  showAddModal.value = true;
+};
+
+/** Patch an existing transaction in the array */
+const handleTransactionUpdated = (updated) => {
+  const idx = transactions.value.findIndex((t) => t.id === updated.id);
+  if (idx === -1) return;
+
+  // Preserve original date & id, overwrite the editable fields
+  transactions.value[idx] = {
+    ...transactions.value[idx],
+    text: updated.text,
+    amount: updated.amount,
+    category: updated.category,
+    icon: updated.icon,
+  };
+
+  saveTransactions();
+  showAddModal.value = false;
+  editingTransaction.value = null;
+  toast.success('Transaction updated');
+};
+
+const handleCurrencySaved = (currencyCode) => {
+  const normalized = setStoredCurrency(currencyCode);
+  selectedCurrency.value = normalized;
+  toast.success(`Currency set to ${normalized}`);
 };
 
 const handlePwaUpdateAvailable = (event) => {

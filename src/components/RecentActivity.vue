@@ -103,11 +103,16 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { formatCurrency } from '../utils/currency';
 
 const props = defineProps({
   transactions: {
     type: Array,
     required: true,
+  },
+  currency: {
+    type: String,
+    default: 'USD',
   },
   initialLimit: {
     type: Number,
@@ -115,7 +120,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['delete']);
+const emit = defineEmits(['delete', 'edit']);
 
 const showAll = ref(false);
 const openSwipeId = ref(null);
@@ -253,8 +258,17 @@ const handleCardTap = (id) => {
     skipCardTapForId.value = null;
     return;
   }
+
+  // If swiped open, close it instead of opening the editor
   if (openSwipeId.value === id && draggingId.value === null) {
     openSwipeId.value = null;
+    return;
+  }
+
+  // Normal tap on a non-swiped card → open edit modal
+  const tx = props.transactions.find((t) => t.id === id);
+  if (tx) {
+    emit('edit', tx);
   }
 };
 
@@ -269,15 +283,12 @@ const toggleViewMode = () => {
 
 /**
  * Formats the transaction amount with sign and currency.
- * Expenses show as "-$5.50", income as "+$4,500.00"
+ * Expenses show as "-$5.50", income as "+$4,500.00".
  */
 const formatAmount = (amount) => {
-  const abs = Math.abs(amount);
-  const formatted = abs.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  return formatCurrency(amount, props.currency, {
+    signDisplay: 'always',
   });
-  return amount < 0 ? `-$${formatted}` : `+$${formatted}`;
 };
 
 /**

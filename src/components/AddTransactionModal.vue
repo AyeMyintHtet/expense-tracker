@@ -5,7 +5,7 @@
         <div class="modal-handle" aria-hidden="true"></div>
 
         <div class="modal-header">
-          <h3 class="modal-title">Quick Add</h3>
+          <h3 class="modal-title">{{ isEditMode ? 'Edit Transaction' : 'Quick Add' }}</h3>
           <button class="modal-close" @click="$emit('close')" aria-label="Close modal">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round">
@@ -38,7 +38,7 @@
           <div class="form-group">
             <label class="form-label text-label" for="tx-amount">Amount</label>
             <div class="amount-input-wrap">
-              <span class="amount-prefix">$</span>
+              <span class="amount-prefix">{{ currencySymbol }}</span>
               <input id="tx-amount" v-model="amount" type="number" step="0.01" min="0" inputmode="decimal"
                 class="form-input amount-input" placeholder="0.00" required />
             </div>
@@ -65,7 +65,7 @@
           <button type="submit" class="submit-btn"
             :class="{ 'submit-btn--expense': txType === 'expense', 'submit-btn--income': txType === 'income' }"
             :disabled="!isValid">
-            Add {{ txType === 'income' ? 'Income' : 'Expense' }}
+            {{ isEditMode ? 'Save Changes' : `Add ${txType === 'income' ? 'Income' : 'Expense'}` }}
           </button>
         </form>
       </div>
@@ -75,8 +75,21 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { getCurrencySymbol } from '../utils/currency';
 
-const emit = defineEmits(['close', 'submit']);
+const props = defineProps({
+  /** Pass a transaction object to enter edit mode; null/undefined = create mode */
+  transaction: {
+    type: Object,
+    default: null,
+  },
+  currency: {
+    type: String,
+    default: 'USD',
+  },
+});
+
+const emit = defineEmits(['close', 'submit', 'update']);
 
 const name = ref('');
 const amount = ref('');
@@ -89,7 +102,11 @@ const categoriesByType = {
   income: ['Salary', 'Freelance', 'Bonus', 'Refund', 'General'],
 };
 
+/** True when editing an existing transaction */
+const isEditMode = computed(() => !!props.transaction);
+
 const categoryOptions = computed(() => categoriesByType[txType.value]);
+const currencySymbol = computed(() => getCurrencySymbol(props.currency));
 
 const isValid = computed(() => {
   const parsed = Number(amount.value);
@@ -109,6 +126,28 @@ const categoryIcons = {
   'General': 'wallet',
 };
 
+/**
+ * Populate form fields from a transaction object.
+ * Used on initial mount and whenever the prop changes.
+ */
+const populateFromTransaction = (tx) => {
+  if (!tx) return;
+
+  name.value = tx.text ?? '';
+  // Always display amount as a positive number in the input
+  amount.value = String(Math.abs(tx.amount));
+  txType.value = tx.amount >= 0 ? 'income' : 'expense';
+  category.value = tx.category ?? 'General';
+};
+
+// Pre-fill on mount if transaction is provided
+populateFromTransaction(props.transaction);
+
+// Re-populate if the parent swaps which transaction is being edited
+watch(() => props.transaction, (tx) => {
+  if (tx) populateFromTransaction(tx);
+});
+
 const setQuickAmount = (preset) => {
   amount.value = String(preset);
 };
@@ -126,18 +165,25 @@ const handleSubmit = () => {
   const normalized = Number(amount.value);
   const signedAmount = txType.value === 'income' ? normalized : -normalized;
 
-  emit('submit', {
+  const payload = {
     text: name.value.trim(),
     amount: signedAmount,
     category: category.value,
     icon: categoryIcons[category.value] || 'wallet',
-  });
+  };
 
-  // Reset form
-  name.value = '';
-  amount.value = '';
-  txType.value = 'expense';
-  category.value = 'Food & Drink';
+  if (isEditMode.value) {
+    // Emit update with the original id so the parent can patch the right entry
+    emit('update', { ...payload, id: props.transaction.id });
+  } else {
+    emit('submit', payload);
+
+    // Only reset form after a create, not an edit
+    name.value = '';
+    amount.value = '';
+    txType.value = 'expense';
+    category.value = 'Food & Drink';
+  }
 };
 </script>
 
@@ -264,19 +310,38 @@ const handleSubmit = () => {
 
 .amount-input-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+/* Inherit focus ring from the inner input */
+.amount-input-wrap:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-dim);
 }
 
 .amount-prefix {
-  position: absolute;
-  top: 50%;
-  left: 14px;
-  transform: translateY(-50%);
+  padding-left: 14px;
   color: var(--color-text-secondary);
   font-weight: 600;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Prevents prefix from shrinking when the input is wide */
+  flex-shrink: 0;
 }
 
+/* Remove duplicate border/bg since the wrapper handles it */
 .amount-input {
-  padding-left: 32px;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  flex: 1;
+  min-width: 0;
 }
 
 .form-input:focus {
