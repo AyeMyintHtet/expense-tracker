@@ -85,6 +85,11 @@
   </div>
 
   <PwaUpdateBanner :show="isPwaUpdateAvailable" @update="handlePwaUpdate" @dismiss="dismissPwaUpdate" />
+  <PwaInstallBanner
+    :show="isInstallBannerVisible && !isPwaUpdateAvailable"
+    @install="handleInstallClick"
+    @dismiss="dismissInstallBanner"
+  />
 </template>
 
 <script setup>
@@ -103,6 +108,7 @@ import AddTransactionModal from './components/AddTransactionModal.vue';
 import TwoFactorAuth from './components/TwoFactorAuth.vue';
 import LockScreen from './components/LockScreen.vue';
 import PwaUpdateBanner from './components/PwaUpdateBanner.vue';
+import PwaInstallBanner from './components/PwaInstallBanner.vue';
 import CurrencySetupModal from './components/CurrencySetupModal.vue';
 import {
   INACTIVITY_TIMEOUT_MS,
@@ -137,11 +143,14 @@ const showAddModal = ref(false);
 const editingTransaction = ref(null);
 const isPwaUpdateAvailable = ref(false);
 const waitingServiceWorker = ref(null);
+const isInstallBannerVisible = ref(false);
+const isInstallBannerDismissed = ref(false);
 const tabDirection = ref('forward');
 const selectedCurrency = ref(getStoredCurrency());
 const currencyOptions = getCurrencyOptions('en-US');
 
 const PWA_UPDATE_EVENT = 'spent:pwa-update-available';
+let deferredInstallPrompt = null;
 
 // ==========================================
 // SECURITY: App state machine
@@ -292,6 +301,8 @@ onMounted(() => {
     transactions.value = saved;
   }
   window.addEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
+  window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  window.addEventListener('appinstalled', handleAppInstalled);
 });
 
 // Computed values
@@ -438,9 +449,54 @@ const dismissPwaUpdate = () => {
   isPwaUpdateAvailable.value = false;
 };
 
+const handleBeforeInstallPrompt = (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+
+  if (!isInstallBannerDismissed.value) {
+    isInstallBannerVisible.value = true;
+  }
+};
+
+const dismissInstallBanner = () => {
+  isInstallBannerDismissed.value = true;
+  isInstallBannerVisible.value = false;
+};
+
+const handleInstallClick = async () => {
+  if (!deferredInstallPrompt) {
+    isInstallBannerVisible.value = false;
+    return;
+  }
+
+  const promptEvent = deferredInstallPrompt;
+
+  // Clear the deferred event before prompting to avoid duplicate triggers.
+  deferredInstallPrompt = null;
+
+  try {
+    await promptEvent.prompt();
+    const choiceResult = await promptEvent.userChoice;
+    const accepted = choiceResult?.outcome === 'accepted';
+    console.info(`[PWA] Install prompt ${accepted ? 'accepted' : 'declined'}.`);
+  } catch (error) {
+    console.error('[PWA] Failed to show install prompt:', error);
+  } finally {
+    isInstallBannerVisible.value = false;
+  }
+};
+
+const handleAppInstalled = () => {
+  deferredInstallPrompt = null;
+  isInstallBannerVisible.value = false;
+  isInstallBannerDismissed.value = true;
+};
+
 onBeforeUnmount(() => {
   stopActivityTracking();
   window.removeEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
+  window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  window.removeEventListener('appinstalled', handleAppInstalled);
 });
 </script>
 
