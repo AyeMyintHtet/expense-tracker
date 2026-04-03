@@ -305,6 +305,7 @@ const handleSubmit = () => {
   font-size: 0.9375rem;
   outline: none;
   transition: border-color var(--transition-fast);
+  appearance: none;
   -webkit-appearance: none;
 }
 

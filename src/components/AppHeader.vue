@@ -1,14 +1,14 @@
 <template>
   <header class="app-header">
     <div class="header-brand">
-      <!-- Avatar / Logo circle -->
-      <div class="brand-avatar">
+      <!-- Avatar / Logo circle (decorative, text label follows) -->
+      <div class="brand-avatar" aria-hidden="true">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="8" r="4" fill="#00FFAB"/>
           <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="#00FFAB" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
-      <span class="brand-name">Spent</span>
+      <h1 class="brand-name">Spent</h1>
     </div>
   </header>
 </template>
@@ -59,6 +59,7 @@
 }
 
 .brand-name {
+  margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text-primary);

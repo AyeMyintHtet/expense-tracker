@@ -2,12 +2,14 @@
   "name": "Spent Expense Tracker",
   "short_name": "Spent",
   "description": "Track daily expenses and income with an installable offline-first app.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0A0A0A",
   "theme_color": "#0A0A0A",
+  "prefer_related_applications": false,
   "categories": [
     "finance",
     "productivity"
@@ -30,6 +32,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Spent expense tracker home screen"
     }
   ]
 }
