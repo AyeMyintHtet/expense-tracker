@@ -90,6 +90,10 @@
     @install="handleInstallClick"
     @dismiss="dismissInstallBanner"
   />
+  <PwaIosInstallTooltip
+    :show="isIosInstallTooltipVisible && !isInstallBannerVisible && !isPwaUpdateAvailable"
+    @dismiss="dismissIosInstallTooltip"
+  />
 </template>
 
 <script setup>
@@ -109,6 +113,7 @@ import TwoFactorAuth from './components/TwoFactorAuth.vue';
 import LockScreen from './components/LockScreen.vue';
 import PwaUpdateBanner from './components/PwaUpdateBanner.vue';
 import PwaInstallBanner from './components/PwaInstallBanner.vue';
+import PwaIosInstallTooltip from './components/PwaIosInstallTooltip.vue';
 import CurrencySetupModal from './components/CurrencySetupModal.vue';
 import {
   INACTIVITY_TIMEOUT_MS,
@@ -145,12 +150,15 @@ const isPwaUpdateAvailable = ref(false);
 const waitingServiceWorker = ref(null);
 const isInstallBannerVisible = ref(false);
 const isInstallBannerDismissed = ref(false);
+const isIosInstallTooltipVisible = ref(false);
 const tabDirection = ref('forward');
 const selectedCurrency = ref(getStoredCurrency());
 const currencyOptions = getCurrencyOptions('en-US');
 
 const PWA_UPDATE_EVENT = 'spent:pwa-update-available';
+const IOS_INSTALL_TOOLTIP_MS = 10_000;
 let deferredInstallPrompt = null;
+let iosInstallTooltipTimer = null;
 
 // ==========================================
 // SECURITY: App state machine
@@ -303,6 +311,8 @@ onMounted(() => {
   window.addEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
   window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   window.addEventListener('appinstalled', handleAppInstalled);
+
+  maybeShowIosInstallTooltip();
 });
 
 // Computed values
@@ -449,9 +459,49 @@ const dismissPwaUpdate = () => {
   isPwaUpdateAvailable.value = false;
 };
 
+const stopIosInstallTooltipTimer = () => {
+  if (!iosInstallTooltipTimer) return;
+
+  clearTimeout(iosInstallTooltipTimer);
+  iosInstallTooltipTimer = null;
+};
+
+const isIosSafari = () => {
+  const userAgent = navigator.userAgent || '';
+  const isIosFromAgent = /iPad|iPhone|iPod/i.test(userAgent);
+  const isModernIpad = /Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1;
+  const isIos = isIosFromAgent || isModernIpad;
+  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
+  return isIos && isSafari;
+};
+
+const isStandaloneMode = () => {
+  const fromDisplayMode = window.matchMedia('(display-mode: standalone)').matches;
+  const fromNavigator = window.navigator.standalone === true;
+  return fromDisplayMode || fromNavigator;
+};
+
+const maybeShowIosInstallTooltip = () => {
+  if (!isIosSafari()) return;
+  if (isStandaloneMode()) return;
+
+  isIosInstallTooltipVisible.value = true;
+  stopIosInstallTooltipTimer();
+  iosInstallTooltipTimer = setTimeout(() => {
+    isIosInstallTooltipVisible.value = false;
+    iosInstallTooltipTimer = null;
+  }, IOS_INSTALL_TOOLTIP_MS);
+};
+
+const dismissIosInstallTooltip = () => {
+  isIosInstallTooltipVisible.value = false;
+  stopIosInstallTooltipTimer();
+};
+
 const handleBeforeInstallPrompt = (event) => {
   event.preventDefault();
   deferredInstallPrompt = event;
+  dismissIosInstallTooltip();
 
   if (!isInstallBannerDismissed.value) {
     isInstallBannerVisible.value = true;
@@ -490,10 +540,12 @@ const handleAppInstalled = () => {
   deferredInstallPrompt = null;
   isInstallBannerVisible.value = false;
   isInstallBannerDismissed.value = true;
+  dismissIosInstallTooltip();
 };
 
 onBeforeUnmount(() => {
   stopActivityTracking();
+  stopIosInstallTooltipTimer();
   window.removeEventListener(PWA_UPDATE_EVENT, handlePwaUpdateAvailable);
   window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   window.removeEventListener('appinstalled', handleAppInstalled);
