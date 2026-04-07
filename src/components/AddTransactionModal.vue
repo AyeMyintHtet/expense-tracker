@@ -55,10 +55,65 @@
           <div class="form-group">
             <label class="form-label text-label" for="tx-category">Category</label>
             <div class="category-grid" id="tx-category">
-              <button v-for="option in categoryOptions" :key="option" type="button" class="category-btn"
-                :class="{ active: category === option }" @click="category = option">
+              <button
+                v-for="option in categoryOptions"
+                :key="option"
+                type="button"
+                class="category-btn"
+                :class="{ active: category === option }"
+                @click="category = option"
+                @contextmenu.prevent="handleCategoryContext(option)"
+              >
                 {{ option }}
+                <!-- Show remove icon on custom categories -->
+                <span
+                  v-if="isCustomCategory(option)"
+                  class="category-remove"
+                  @click.stop="confirmRemoveCategory(option)"
+                  title="Remove category"
+                >
+                  &times;
+                </span>
               </button>
+
+              <!-- Add-category trigger (+ pill) -->
+              <button
+                v-if="!isAddingCategory"
+                type="button"
+                class="category-btn category-btn--add"
+                @click="startAddingCategory"
+                title="Add custom category"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
+              <!-- Inline input for new category -->
+              <div v-if="isAddingCategory" class="category-add-input-wrap">
+                <input
+                  ref="newCategoryInput"
+                  v-model="newCategoryName"
+                  type="text"
+                  class="category-add-input"
+                  placeholder="Category name"
+                  maxlength="24"
+                  @keydown.enter.prevent="addCategory"
+                  @keydown.escape="cancelAddCategory"
+                />
+                <button type="button" class="category-add-confirm" @click="addCategory" :disabled="!newCategoryName.trim()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+                <button type="button" class="category-add-cancel" @click="cancelAddCategory">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -74,8 +129,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { getCurrencySymbol } from '../utils/currency';
+import { STORAGE_KEYS } from '../utils/security';
 
 const props = defineProps({
   /** Pass a transaction object to enter edit mode; null/undefined = create mode */
@@ -97,15 +153,116 @@ const txType = ref('expense');
 const category = ref('Food & Drink');
 const quickAmountPresets = [5, 10, 20, 50];
 
-const categoriesByType = {
+// Default (built-in) categories — cannot be removed by the user
+const DEFAULT_CATEGORIES = {
   expense: ['Food & Drink', 'Transport', 'Subscriptions', 'Shopping', 'Debt', 'General'],
   income: ['Salary', 'Freelance', 'Bonus', 'Refund', 'General'],
+};
+
+// ==========================================
+// CUSTOM CATEGORIES: persisted in localStorage
+// ==========================================
+
+/** Load user-created categories from localStorage */
+const loadCustomCategories = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.customCategories);
+    if (!raw) return { expense: [], income: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      expense: Array.isArray(parsed.expense) ? parsed.expense : [],
+      income: Array.isArray(parsed.income) ? parsed.income : [],
+    };
+  } catch {
+    return { expense: [], income: [] };
+  }
+};
+
+/** Persist user-created categories to localStorage */
+const saveCustomCategories = () => {
+  localStorage.setItem(
+    STORAGE_KEYS.customCategories,
+    JSON.stringify(customCategories.value),
+  );
+};
+
+const customCategories = ref(loadCustomCategories());
+
+// UI state for the inline "add category" flow
+const isAddingCategory = ref(false);
+const newCategoryName = ref('');
+const newCategoryInput = ref(null);
+
+/** Check if a category is user-created (not a built-in default) */
+const isCustomCategory = (categoryName) => {
+  return !DEFAULT_CATEGORIES[txType.value]?.includes(categoryName)
+    && customCategories.value[txType.value]?.includes(categoryName);
+};
+
+const startAddingCategory = () => {
+  isAddingCategory.value = true;
+  newCategoryName.value = '';
+  // Auto-focus the input after the DOM updates
+  nextTick(() => {
+    newCategoryInput.value?.focus();
+  });
+};
+
+const cancelAddCategory = () => {
+  isAddingCategory.value = false;
+  newCategoryName.value = '';
+};
+
+const addCategory = () => {
+  const trimmed = newCategoryName.value.trim();
+  if (!trimmed) return;
+
+  const type = txType.value;
+  const allCurrent = [...DEFAULT_CATEGORIES[type], ...customCategories.value[type]];
+
+  // Prevent duplicates (case-insensitive check)
+  if (allCurrent.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+    cancelAddCategory();
+    return;
+  }
+
+  customCategories.value[type].push(trimmed);
+  saveCustomCategories();
+
+  // Auto-select the newly created category
+  category.value = trimmed;
+  cancelAddCategory();
+};
+
+/** Remove a custom category (only user-created ones can be removed) */
+const confirmRemoveCategory = (categoryName) => {
+  if (!isCustomCategory(categoryName)) return;
+
+  const type = txType.value;
+  customCategories.value[type] = customCategories.value[type].filter(
+    (c) => c !== categoryName,
+  );
+  saveCustomCategories();
+
+  // If the removed category was selected, fall back to the first available
+  if (category.value === categoryName) {
+    category.value = DEFAULT_CATEGORIES[type][0];
+  }
+};
+
+/** Right-click handler: remove custom category */
+const handleCategoryContext = (categoryName) => {
+  confirmRemoveCategory(categoryName);
 };
 
 /** True when editing an existing transaction */
 const isEditMode = computed(() => !!props.transaction);
 
-const categoryOptions = computed(() => categoriesByType[txType.value]);
+// Merge default + custom categories for the active type
+const categoryOptions = computed(() => [
+  ...DEFAULT_CATEGORIES[txType.value],
+  ...customCategories.value[txType.value],
+]);
 const currencySymbol = computed(() => getCurrencySymbol(props.currency));
 
 const isValid = computed(() => {
@@ -149,14 +306,16 @@ watch(() => props.transaction, (tx) => {
 });
 
 const setQuickAmount = (preset) => {
-  amount.value = String(preset);
+  amount.value = String(Number(amount.value) + preset);
 };
 
 watch(txType, (type) => {
-  const options = categoriesByType[type];
+  const options = [...DEFAULT_CATEGORIES[type], ...customCategories.value[type]];
   if (!options.includes(category.value)) {
     category.value = options[0];
   }
+  // Close inline input when switching type
+  cancelAddCategory();
 });
 
 const handleSubmit = () => {
@@ -381,9 +540,11 @@ const handleSubmit = () => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
+  align-items: center;
 }
 
 .category-btn {
+  position: relative;
   min-height: 34px;
   border-radius: 999px;
   padding: 0 12px;
@@ -393,12 +554,115 @@ const handleSubmit = () => {
   border: 1px solid var(--color-border);
   background: var(--color-surface-elevated);
   transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .category-btn.active {
   border-color: rgba(0, 255, 171, 0.45);
   color: var(--color-primary);
   background: var(--color-primary-dim);
+}
+
+/* "+" button to add a new category */
+.category-btn--add {
+  border-style: dashed;
+  border-color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.category-btn--add:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-dim);
+}
+
+/* "×" remove badge on custom categories */
+.category-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  line-height: 1;
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--color-expense);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-left: 2px;
+}
+
+.category-remove:hover {
+  background: rgba(255, 107, 107, 0.35);
+  transform: scale(1.15);
+}
+
+/* Inline input wrapper for adding a category */
+.category-add-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: fadeIn 0.15s ease;
+}
+
+.category-add-input {
+  width: 120px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 0.75rem;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-dim);
+  transition: border-color var(--transition-fast);
+}
+
+.category-add-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.category-add-confirm,
+.category-add-cancel {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.category-add-confirm {
+  color: var(--color-primary);
+  background: var(--color-primary-dim);
+}
+
+.category-add-confirm:hover:not(:disabled) {
+  background: rgba(0, 255, 171, 0.3);
+}
+
+.category-add-confirm:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.category-add-cancel {
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-hover);
+}
+
+.category-add-cancel:hover {
+  color: var(--color-expense);
+  background: rgba(255, 107, 107, 0.15);
 }
 
 .submit-btn {

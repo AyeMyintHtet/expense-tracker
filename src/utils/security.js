@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   lockoutUntil: 'spent_lockout_until',
   transactions: 'spent_transactions',
   currency: 'spent_currency',
+  customCategories: 'spent_custom_categories',
 };
 
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
